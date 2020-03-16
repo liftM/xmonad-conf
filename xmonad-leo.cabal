@@ -1,0 +1,10 @@
+cabal-version: 3.0
+name: xmonad-leo
+version: 0.0.1.0
+
+executable xmonad
+  main-is: xmonad.hs
+  build-depends:
+      base >=4.12 && <4.13
+    , xmonad == 0.15
+    , xmonad-contrib == 0.16
