@@ -22,7 +22,12 @@ import           XMonad.Util.NamedWindows                 ( getName
                                                           , unName
                                                           )
 import           XMonad.Util.Run                          ( spawnPipe )
-import           XMonad.Prompt                            ( XPConfig )
+import           XMonad.Prompt                            ( XPPosition(..)
+                                                          , font
+                                                          , position
+                                                          , XPConfig
+                                                          )
+import           XMonad.Actions.DynamicWorkspaces         ( selectWorkspace )
 
 main :: IO ()
 main = do
@@ -32,12 +37,25 @@ main = do
   xmproc <- spawnPipe "xmobar"
   xmonad $ docks $ (xConf xmproc) `additionalKeys` keybindings
 
--- Keymask names
-superMask :: KeyMask
-superMask = mod4Mask
-
-defaultMask :: KeyMask
-defaultMask = superMask
+-- XMonad configuration
+xConf outputHandle = def
+  { borderWidth       = 2
+  , modMask           = defaultMask
+  , focusFollowsMouse = False
+  , clickJustFocuses  = False
+  , terminal          = "terminator"
+  , workspaces        = map snd customWorkspaces
+  -- Workaround for Java Swing applications: https://stackoverflow.com/questions/30742662/java-swing-gui-not-displaying-in-xmonad
+  , startupHook       = setWMName "LG3D"
+  , manageHook        = manageDocks <+> placeHook simpleSmart <+> manageHook def
+  , layoutHook        = avoidStruts $ smartBorders $ layoutHook def
+  , logHook           = dynamicLogWithPP xmobarPP
+                          { ppOutput = hPutStrLn outputHandle
+                          , ppTitle  = xmobarColor "green" ""
+                          , ppExtras = [logTitles (xmobarColor "green" "")]
+                          , ppOrder  = \(ws : l : _ : e) -> [ws, l] ++ e
+                          }
+  }
 
 -- Extra workspaces
 customWorkspaces :: [(KeySym, String)]
@@ -60,34 +78,16 @@ logTitles ppFocus =
 
 -- Prompt configuration
 xpConf :: XPConfig
-xpConf = def
+xpConf = def { position = Bottom, font = "xft:monospace" }
 
--- Commands
-reload :: X ()
-reload =
-  spawn
-    "if type xmonad; then xmonad -- --recompile && xmonad -- --restart; else xmessage xmonad not in \\$PATH: \"$PATH\"; fi"
+-- Keymask names
+superMask :: KeyMask
+superMask = mod4Mask
 
--- XMonad configuration
-xConf outputHandle = def
-  { borderWidth       = 2
-  , modMask           = defaultMask
-  , focusFollowsMouse = False
-  , clickJustFocuses  = False
-  , terminal          = "terminator"
-  , workspaces        = map snd customWorkspaces
-  -- Workaround for Java Swing applications: https://stackoverflow.com/questions/30742662/java-swing-gui-not-displaying-in-xmonad
-  , startupHook       = setWMName "LG3D"
-  , manageHook        = manageDocks <+> placeHook simpleSmart <+> manageHook def
-  , layoutHook        = avoidStruts $ smartBorders $ layoutHook def
-  , logHook           = dynamicLogWithPP xmobarPP
-                          { ppOutput = hPutStrLn outputHandle
-                          , ppTitle  = xmobarColor "green" ""
-                          , ppExtras = [logTitles (xmobarColor "green" "")]
-                          , ppOrder  = \(ws : l : _ : e) -> [ws, l] ++ e
-                          }
-  }
+defaultMask :: KeyMask
+defaultMask = superMask
 
+-- Custom keybindings
 keybindings :: [((KeyMask, KeySym), X ())]
 keybindings =
   [
@@ -142,7 +142,10 @@ keybindings =
       , spawn "maim -s ~/screenshots/$(date +%s).png"
       )
       -- Remap reload => mask-r and physical screens to mask-{q,w,e}
-    , ((defaultMask, xK_r), reload)
+    , ( (defaultMask, xK_r)
+      , spawn
+        "if type xmonad; then xmonad --recompile && xmonad --restart; else xmessage xmonad not in \\$PATH: \"$PATH\"; fi"
+      )
     , ( (defaultMask .|. shiftMask, xK_r)
       , io exitSuccess
       )
