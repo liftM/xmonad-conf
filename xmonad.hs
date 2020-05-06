@@ -135,11 +135,11 @@ defaultMask = superMask
 
 dmenuWorkspaces :: (WorkspaceId -> X ()) -> X ()
 dmenuWorkspaces f = do
-  wss <- withWindowSet (\w -> return $ SS.workspaces w)
+  wss <- withWindowSet (return . SS.workspaces)
   let names = fmap SS.tag wss
   ws <-
     dmenu
-    $  filter (\x -> not $ null x)
+    $  filter (not . null)
     $  customWorkspaceNames
     ++ (sort $ filter (\x -> not $ Set.member x customWorkspaceNamesSet) names)
   if null ws then return () else f ws
