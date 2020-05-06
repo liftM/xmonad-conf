@@ -14,5 +14,6 @@ executable xmonad
   main-is:            xmonad.hs
   build-depends:
     , base            ^>=4.13
+    , containers      ==0.6.2.1
     , xmonad          ==0.15
     , xmonad-contrib  ==0.16

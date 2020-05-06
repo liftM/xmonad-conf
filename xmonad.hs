@@ -8,7 +8,9 @@ import           System.IO                                ( IO
                                                           , hPutStrLn
                                                           )
 
-import           Data.Bool                                ( Bool(..) )
+import           Data.Bool                                ( not
+                                                          , Bool(..)
+                                                          )
 import           Data.Int                                 ( Int )
 import           Data.String                              ( String )
 import           Data.Function                            ( id
@@ -17,15 +19,24 @@ import           Data.Function                            ( id
                                                           )
 
 import           Data.Tuple                               ( snd )
-import           Data.List                                ( (++)
+import           Data.List                                ( sort
+                                                          , null
+                                                          , (++)
                                                           , zip
                                                           , intercalate
+                                                          , filter
                                                           )
-import           Data.Maybe                               ( Maybe(Just) )
+import           Data.Set                                 ( Set )
+import qualified Data.Set                      as Set
+import           Data.Maybe                               ( Maybe(..) )
 
 import           Data.Eq                                  ( (==) )
-import           Data.Functor                             ( Functor(fmap) )
-import           Control.Monad                            ( mapM )
+import           Data.Functor                             ( Functor(..)
+                                                          , (<$>)
+                                                          )
+import           Control.Monad                            ( return
+                                                          , mapM
+                                                          )
 
 import           Text.Show                                ( Show(show) )
 
@@ -56,14 +67,9 @@ import           XMonad.Util.NamedWindows                 ( getName
                                                           , unName
                                                           )
 import           XMonad.Util.Run                          ( spawnPipe )
-import           XMonad.Prompt                            ( XPPosition(..)
-                                                          , font
-                                                          , position
-                                                          , XPConfig
-                                                          )
-import           XMonad.Actions.DynamicWorkspaces         ( withWorkspace
+import           XMonad.Util.Dmenu                        ( dmenu )
+import           XMonad.Actions.DynamicWorkspaces         ( addWorkspace
                                                           , removeEmptyWorkspace
-                                                          , selectWorkspace
                                                           )
 
 
@@ -82,7 +88,7 @@ xConf outputHandle = def
   , focusFollowsMouse = False
   , clickJustFocuses  = False
   , terminal          = "terminator"
-  , workspaces        = fmap snd customWorkspaces
+  , workspaces        = snd <$> customWorkspaces
   -- Workaround for Java Swing applications: https://stackoverflow.com/questions/30742662/java-swing-gui-not-displaying-in-xmonad
   , startupHook       = setWMName "LG3D"
   , manageHook        = manageDocks <+> placeHook simpleSmart <+> manageHook def
@@ -96,10 +102,16 @@ xConf outputHandle = def
   }
 
 -- Extra workspaces
-customWorkspaces :: [(KeySym, String)]
+customWorkspaces :: [(KeySym, WorkspaceId)]
 customWorkspaces = zip
   ([xK_grave] ++ [xK_1 .. xK_9] ++ [xK_0, xK_minus, xK_equal, xK_BackSpace])
   ((["~"] ++ fmap show [1 .. 9 :: Int]) ++ ["0", "-", "=", "B"])
+
+customWorkspaceNames :: [WorkspaceId]
+customWorkspaceNames = snd <$> customWorkspaces
+
+customWorkspaceNamesSet :: Set WorkspaceId
+customWorkspaceNamesSet = Set.fromList customWorkspaceNames
 
 -- Log truncated pipe-delimited window titles, highlighting focused window
 logTitles :: (String -> String) -> Logger
@@ -114,16 +126,23 @@ logTitles ppFocus =
   windowTitles windowSet =
     mapM (fmap $ highlightFocused windowSet) $ namedWindows windowSet
 
--- Prompt configuration
-xpConf :: XPConfig
-xpConf = def { position = Bottom, font = "xft:monospace" }
-
 -- Keymask names
 superMask :: KeyMask
 superMask = mod4Mask
 
 defaultMask :: KeyMask
 defaultMask = superMask
+
+dmenuWorkspaces :: (WorkspaceId -> X ()) -> X ()
+dmenuWorkspaces f = do
+  wss <- withWindowSet (\w -> return $ SS.workspaces w)
+  let names = fmap SS.tag wss
+  ws <-
+    dmenu
+    $  filter (\x -> not $ null x)
+    $  customWorkspaceNames
+    ++ (sort $ filter (\x -> not $ Set.member x customWorkspaceNamesSet) names)
+  if null ws then return () else f ws
 
 -- Custom keybindings
 keybindings :: [((KeyMask, KeySym), X ())]
@@ -175,9 +194,9 @@ keybindings =
       , spawn "$(yeganesh -x)"
       )
       -- Dynamic workspaces
-    , ((defaultMask, xK_backslash), selectWorkspace xpConf)
+    , ((defaultMask, xK_backslash), dmenuWorkspaces addWorkspace)
     , ( (defaultMask .|. shiftMask, xK_backslash)
-      , withWorkspace xpConf (windows . SS.shift)
+      , dmenuWorkspaces (windows . SS.shift)
       )
     , ( (defaultMask, xK_Delete)
       , removeEmptyWorkspace
