@@ -1,6 +1,33 @@
-import           Data.List                                ( intercalate )
+module Main
+  ( main
+  )
+where
+
 import           System.Exit                              ( exitSuccess )
-import           System.IO                                ( hPutStrLn )
+import           System.IO                                ( IO
+                                                          , hPutStrLn
+                                                          )
+
+import           Data.Bool                                ( Bool(..) )
+import           Data.Int                                 ( Int )
+import           Data.String                              ( String )
+import           Data.Function                            ( id
+                                                          , ($)
+                                                          , (.)
+                                                          )
+
+import           Data.Tuple                               ( snd )
+import           Data.List                                ( (++)
+                                                          , zip
+                                                          , intercalate
+                                                          )
+import           Data.Maybe                               ( Maybe(Just) )
+
+import           Data.Eq                                  ( (==) )
+import           Data.Functor                             ( Functor(fmap) )
+import           Control.Monad                            ( mapM )
+
+import           Text.Show                                ( Show(show) )
 
 import           XMonad
 import           XMonad.Actions.PhysicalScreens
@@ -27,7 +54,11 @@ import           XMonad.Prompt                            ( XPPosition(..)
                                                           , position
                                                           , XPConfig
                                                           )
-import           XMonad.Actions.DynamicWorkspaces         ( selectWorkspace )
+import           XMonad.Actions.DynamicWorkspaces         ( withWorkspace
+                                                          , removeEmptyWorkspace
+                                                          , selectWorkspace
+                                                          )
+
 
 main :: IO ()
 main = do
@@ -44,7 +75,7 @@ xConf outputHandle = def
   , focusFollowsMouse = False
   , clickJustFocuses  = False
   , terminal          = "terminator"
-  , workspaces        = map snd customWorkspaces
+  , workspaces        = fmap snd customWorkspaces
   -- Workaround for Java Swing applications: https://stackoverflow.com/questions/30742662/java-swing-gui-not-displaying-in-xmonad
   , startupHook       = setWMName "LG3D"
   , manageHook        = manageDocks <+> placeHook simpleSmart <+> manageHook def
@@ -61,7 +92,7 @@ xConf outputHandle = def
 customWorkspaces :: [(KeySym, String)]
 customWorkspaces = zip
   ([xK_grave] ++ [xK_1 .. xK_9] ++ [xK_0, xK_minus, xK_equal, xK_BackSpace])
-  ((["~"] ++ map show [1 .. 9 :: Int]) ++ ["0", "-", "=", "B"])
+  ((["~"] ++ fmap show [1 .. 9 :: Int]) ++ ["0", "-", "=", "B"])
 
 -- Log truncated pipe-delimited window titles, highlighting focused window
 logTitles :: (String -> String) -> Logger
@@ -72,7 +103,7 @@ logTitles ppFocus =
   isFocused windowSet target = (== Just (unName target)) $ SS.peek windowSet
   highlightFocused windowSet target =
     (if isFocused windowSet target then ppFocus else id) $ name target
-  namedWindows = map getName . SS.index
+  namedWindows = fmap getName . SS.index
   windowTitles windowSet =
     mapM (fmap $ highlightFocused windowSet) $ namedWindows windowSet
 
@@ -136,6 +167,14 @@ keybindings =
     , ( (defaultMask, xK_p)
       , spawn "$(yeganesh -x)"
       )
+      -- Dynamic workspaces
+    , ((defaultMask, xK_backslash), selectWorkspace xpConf)
+    , ( (defaultMask .|. shiftMask, xK_backslash)
+      , withWorkspace xpConf (windows . SS.shift)
+      )
+    , ( (defaultMask, xK_Delete)
+      , removeEmptyWorkspace
+      )
       -- Screenshots
     , ((noModMask, xK_Print), spawn "maim ~/screenshots/$(date +%s).png")
     , ( (defaultMask, xK_Print)
@@ -143,8 +182,9 @@ keybindings =
       )
       -- Remap reload => mask-r and physical screens to mask-{q,w,e}
     , ( (defaultMask, xK_r)
-      , spawn
-        "if type xmonad; then xmonad --recompile && xmonad --restart; else xmessage xmonad not in \\$PATH: \"$PATH\"; fi"
+      , do
+        ok <- recompile False
+        if ok then restart "xmonad" True else spawn "xmessage recompile failed"
       )
     , ( (defaultMask .|. shiftMask, xK_r)
       , io exitSuccess
