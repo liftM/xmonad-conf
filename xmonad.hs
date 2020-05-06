@@ -34,7 +34,9 @@ import           Data.Eq                                  ( (==) )
 import           Data.Functor                             ( Functor(..)
                                                           , (<$>)
                                                           )
-import           Control.Monad                            ( return
+import           Control.Monad                            ( liftM2
+                                                          , (>>)
+                                                          , return
                                                           , mapM
                                                           )
 
@@ -68,7 +70,8 @@ import           XMonad.Util.NamedWindows                 ( getName
                                                           )
 import           XMonad.Util.Run                          ( spawnPipe )
 import           XMonad.Util.Dmenu                        ( dmenu )
-import           XMonad.Actions.DynamicWorkspaces         ( addWorkspace
+import           XMonad.Actions.DynamicWorkspaces         ( addHiddenWorkspace
+                                                          , addWorkspace
                                                           , removeEmptyWorkspace
                                                           )
 
@@ -196,7 +199,7 @@ keybindings =
       -- Dynamic workspaces
     , ((defaultMask, xK_backslash), dmenuWorkspaces addWorkspace)
     , ( (defaultMask .|. shiftMask, xK_backslash)
-      , dmenuWorkspaces (windows . SS.shift)
+      , dmenuWorkspaces (liftM2 (>>) addHiddenWorkspace (windows . SS.shift))
       )
     , ( (defaultMask, xK_Delete)
       , removeEmptyWorkspace
