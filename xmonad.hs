@@ -30,8 +30,15 @@ import           Control.Monad                            ( mapM )
 import           Text.Show                                ( Show(show) )
 
 import           XMonad
-import           XMonad.Actions.PhysicalScreens
-import           XMonad.Hooks.DynamicLog
+import           XMonad.Actions.PhysicalScreens           ( viewScreen
+                                                          , sendToScreen
+                                                          )
+import           XMonad.Hooks.DynamicLog                  ( shorten
+                                                          , dynamicLogWithPP
+                                                          , xmobarColor
+                                                          , xmobarPP
+                                                          , PP(..)
+                                                          )
 import           XMonad.Hooks.ManageDocks                 ( ToggleStruts(..)
                                                           , avoidStruts
                                                           , docks
