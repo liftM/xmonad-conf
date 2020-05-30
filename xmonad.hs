@@ -16,12 +16,20 @@ import XMonad.Util.Dmenu (dmenu)
 import XMonad.Util.EZConfig (additionalKeys)
 import XMonad.Util.Loggers (Logger)
 import XMonad.Util.NamedWindows (getName, unName)
-import XMonad.Util.Run (hPutStrLn, spawnPipe)
+import XMonad.Util.Run (hPutStrLn, runProcessWithInput, spawnPipe)
+import qualified Prelude
 
 main :: IO ()
 main = do
   xmproc <- spawnPipe "xmobar"
   xmonad $ docks $ xConf xmproc `additionalKeys` keybindings
+
+-- Logs to `~/.xsession-errors`
+debug :: String -> X ()
+debug = liftIO . hPutStrLn stderr
+
+spawnOutput :: String -> X String
+spawnOutput s = runProcessWithInput "/bin/sh" ["-c", s] ""
 
 -- XMonad configuration
 xConf outputHandle =
@@ -97,6 +105,9 @@ keybindings :: [((KeyMask, KeySym), X ())]
 keybindings =
   [ -- Custom kill
     ((defaultMask .|. shiftMask, xK_c), spawn "xkill"),
+    -- Close window
+    ((defaultMask, xK_F4), kill),
+    -- TODO: implement
     -- Lock screen
     ((defaultMask .|. shiftMask, xK_l), spawn "slock"),
     ((defaultMask .|. shiftMask, xK_u), spawn "slock dm-tool lock"),
@@ -108,6 +119,24 @@ keybindings =
     ((defaultMask, xK_F10), spawn "amixer sset Master toggle"),
     ((defaultMask, xK_F11), spawn "amixer sset Master 1%-"),
     ((defaultMask, xK_F12), spawn "amixer sset Master 1%+"),
+    -- Microphone control with function keys
+    ((defaultMask, xK_F9), spawn "amixer sset Capture toggle"),
+    -- Select audio output with dmenu
+    ( (defaultMask .|. shiftMask, xK_F10),
+      do
+        sinks <-
+          Prelude.lines
+            <$> spawnOutput "pacmd list-sinks | grep name: | awk '{print $2}' | sed 's/^<\\(.*\\)>$/\\1/'"
+        sink <- dmenu sinks
+        if null sink
+          then return ()
+          else do
+            -- Get current sink inputs and move them to the new sink.
+            sinkInputs <- Prelude.lines <$> spawnOutput "pacmd list-sink-inputs | grep index: | awk '{print $2}'"
+            mapM_ (\sinkInput -> spawn $ "pactl move-sink-input " ++ sinkInput ++ " " ++ sink) sinkInputs
+            -- Set the default sink (this is what the ALSA volume commands adjust).
+            spawn $ "pactl set-default-sink " ++ sink
+    ),
     -- Media player controls with numpad top row
     ((defaultMask, xK_KP_Divide), spawn "playerctl previous"),
     ((defaultMask, xK_KP_Multiply), spawn "playerctl play-pause"),
