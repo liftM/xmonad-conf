@@ -124,15 +124,13 @@ keybindings =
     -- Select audio output with dmenu
     ( (defaultMask .|. shiftMask, xK_F10),
       do
-        sinks <-
-          Prelude.lines
-            <$> spawnOutput "pacmd list-sinks | grep name: | awk '{print $2}' | sed 's/^<\\(.*\\)>$/\\1/'"
+        sinks <- Prelude.lines <$> spawnOutput "pactl list short sinks | awk '{print $2}'"
         sink <- dmenu sinks
         if null sink
           then return ()
           else do
             -- Get current sink inputs and move them to the new sink.
-            sinkInputs <- Prelude.lines <$> spawnOutput "pacmd list-sink-inputs | grep index: | awk '{print $2}'"
+            sinkInputs <- Prelude.lines <$> spawnOutput "pactl list short sink-inputs | awk '{print $1}'"
             mapM_ (\sinkInput -> spawn $ "pactl move-sink-input " ++ sinkInput ++ " " ++ sink) sinkInputs
             -- Set the default sink (this is what the ALSA volume commands adjust).
             spawn $ "pactl set-default-sink " ++ sink
