@@ -1,8 +1,11 @@
 module Main (main) where
 
 import Control.Monad (liftM2)
+import Data.List (elemIndex, findIndex, isSuffixOf)
+import Data.List.Extra (split, trim)
 import Data.Set (member)
 import Relude
+import Relude.Unsafe (fromJust)
 import XMonad
 import XMonad.Actions.DynamicWorkspaces (addHiddenWorkspace, addWorkspace, removeEmptyWorkspace)
 import XMonad.Actions.PhysicalScreens (sendToScreen, viewScreen)
@@ -25,10 +28,10 @@ main = do
   xmonad $ docks $ xConf xmproc `additionalKeys` keybindings
 
 -- Logs to `~/.xsession-errors`
-debug :: String -> X ()
+debug :: (MonadIO m) => String -> m ()
 debug = liftIO . hPutStrLn stderr
 
-spawnOutput :: String -> X String
+spawnOutput :: (MonadIO m) => String -> m String
 spawnOutput s = runProcessWithInput "/bin/sh" ["-c", s] ""
 
 -- XMonad configuration
@@ -74,10 +77,10 @@ logTitles :: (String -> String) -> Logger
 logTitles ppFocus =
   withWindowSet $ fmap (Just . intercalate " | ") . windowTitles
   where
-    name = shorten 50 . show
+    windowName = shorten 50 . show
     isFocused windowSet target = (== Just (unName target)) $ SS.peek windowSet
     highlightFocused windowSet target =
-      (if isFocused windowSet target then ppFocus else id) $ name target
+      (if isFocused windowSet target then ppFocus else id) $ windowName target
     namedWindows = fmap getName . SS.index
     windowTitles windowSet =
       mapM (fmap $ highlightFocused windowSet) $ namedWindows windowSet
@@ -124,16 +127,26 @@ keybindings =
     -- Select audio output with dmenu
     ( (defaultMask .|. shiftMask, xK_F10),
       do
-        sinks <- Prelude.lines <$> spawnOutput "pactl list short sinks | awk '{print $2}'"
-        sink <- dmenu sinks
-        if null sink
+        sinks <- getSinks
+        sinkName <- dmenu $ name <$> sinks
+        if null sinkName
           then return ()
           else do
-            -- Get current sink inputs and move them to the new sink.
-            sinkInputs <- Prelude.lines <$> spawnOutput "pactl list short sink-inputs | awk '{print $1}'"
-            mapM_ (\sinkInput -> spawn $ "pactl move-sink-input " ++ sinkInput ++ " " ++ sink) sinkInputs
-            -- Set the default sink (this is what the ALSA volume commands adjust).
-            spawn $ "pactl set-default-sink " ++ sink
+            let sink = fromJust $ find (\s -> name s == sinkName) sinks
+            -- Query for the card profile of the sink.
+            cards <- getCards
+            let sinkCard = fromJust $ find (\c -> alsaCardName c == card sink) cards
+            profile <- dmenu $ profiles sinkCard
+            if null profile
+              then return ()
+              else do
+                -- Get current sink inputs and move them to the new sink.
+                sinkInputs <- Prelude.lines <$> spawnOutput "pactl list short sink-inputs | awk '{print $1}'"
+                mapM_ (\sinkInput -> spawn $ "pactl move-sink-input " ++ sinkInput ++ " " ++ sinkName) sinkInputs
+                -- Set the card profile.
+                spawn $ "pactl set-card-profile " ++ pulseAudioCardName sinkCard ++ " " ++ profile
+                -- Set the default sink (this is what the ALSA volume commands adjust).
+                spawn $ "pactl set-default-sink " ++ sinkName
     ),
     -- Media player controls with numpad top row
     ((defaultMask, xK_KP_Divide), spawn "playerctl previous"),
@@ -177,3 +190,72 @@ keybindings =
       | (key, screen) <- zip [xK_q, xK_w, xK_e] [0 ..],
         (action, extraMask) <- [(viewScreen, noModMask), (sendToScreen, shiftMask)]
     ]
+
+-- TODO: we should probably split this into a separate module.
+data PulseAudioSink = PulseAudioSink
+  { name :: String,
+    card :: String
+  }
+  deriving (Show)
+
+data PulseAudioCard = PulseAudioCard
+  { pulseAudioCardName :: String,
+    alsaCardName :: String,
+    profiles :: [String]
+  }
+  deriving (Show)
+
+getCards :: (MonadIO m) => m [PulseAudioCard]
+getCards = do
+  result <- liftIO $ runProcessWithInput "pactl" ["list", "cards"] ""
+  return $
+    linesToCard
+      <$> filter
+        (not . null)
+        (split (\s -> "Card " `isPrefixOf` s) $ trim <$> Prelude.lines result)
+  where
+    linesToCard :: [String] -> PulseAudioCard
+    linesToCard ls =
+      PulseAudioCard
+        { pulseAudioCardName = fromPrefixedLine "Name: " ls,
+          alsaCardName = fromPrefixedLine "alsa.card = \"" $ Prelude.init <$> ls,
+          profiles = rights $ extractProfile <$> availableProfiles
+        }
+      where
+        profilesStart = fromJust $ elemIndex "Profiles:" ls
+        profilesEnd = fromJust $ findIndex (\s -> "Active Profile: " `isPrefixOf` s) ls
+        profileLines = drop (profilesStart + 1) $ take profilesEnd ls
+        availableProfiles = filter (\s -> "available: yes)" `isSuffixOf` s) profileLines
+        extractProfile :: String -> Either String String
+        extractProfile line =
+          if "output:" `isPrefixOf` profileName
+            then Right $ Prelude.init profileName
+            else Left line
+          where
+            profileName = Prelude.head $ split (== ' ') line
+
+-- TODO: these should probably have real parsers.
+getSinks :: (MonadIO m) => m [PulseAudioSink]
+getSinks = do
+  result <- liftIO $ runProcessWithInput "pactl" ["list", "sinks"] ""
+  return $
+    linesToSink
+      <$> filter
+        (not . null)
+        (split (\s -> "Sink " `isPrefixOf` s) $ trim <$> Prelude.lines result)
+  where
+    linesToSink :: [String] -> PulseAudioSink
+    linesToSink ls =
+      PulseAudioSink
+        { name = fromPrefixedLine "Name: " ls,
+          card = fromPrefixedLine "alsa.card = \"" $ Prelude.init <$> ls
+        }
+
+fromPrefixedLine :: String -> [String] -> String
+fromPrefixedLine prefix ls = Prelude.head $ catMaybes $ matchLineWithPrefix prefix <$> ls
+
+matchLineWithPrefix :: String -> String -> Maybe String
+matchLineWithPrefix prefix l =
+  if prefix `isPrefixOf` l
+    then Just (drop (length prefix) l)
+    else Nothing
