@@ -31,6 +31,14 @@ main = do
 debug :: (MonadIO m) => String -> m ()
 debug = liftIO . hPutStrLn stderr
 
+spawnDebug :: (MonadIO m) => String -> String -> m String
+spawnDebug msg cmd = do
+  debug msg
+  debug $ "running command: " ++ show cmd
+  output <- liftIO $ spawnOutput cmd
+  debug $ "command output: " ++ show output
+  return output
+
 spawnOutput :: (MonadIO m) => String -> m String
 spawnOutput s = runProcessWithInput "/bin/sh" ["-c", s] ""
 
@@ -109,8 +117,7 @@ keybindings =
   [ -- Custom kill
     ((defaultMask .|. shiftMask, xK_c), spawn "xkill"),
     -- Close window
-    ((defaultMask, xK_F4), kill),
-    -- TODO: implement
+    ((defaultMask, xK_c), kill),
     -- Lock screen
     ((defaultMask .|. shiftMask, xK_l), spawn "slock"),
     ((defaultMask .|. shiftMask, xK_u), spawn "slock dm-tool lock"),
@@ -207,7 +214,7 @@ data PulseAudioCard = PulseAudioCard
 
 getCards :: (MonadIO m) => m [PulseAudioCard]
 getCards = do
-  result <- liftIO $ runProcessWithInput "pactl" ["list", "cards"] ""
+  result <- spawnOutput "pactl list cards"
   return $
     linesToCard
       <$> filter
@@ -237,7 +244,7 @@ getCards = do
 -- TODO: these should probably have real parsers.
 getSinks :: (MonadIO m) => m [PulseAudioSink]
 getSinks = do
-  result <- liftIO $ runProcessWithInput "pactl" ["list", "sinks"] ""
+  result <- spawnOutput "pactl list sinks"
   return $
     linesToSink
       <$> filter
