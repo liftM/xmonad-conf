@@ -17,7 +17,7 @@ executable xmonad
 
   main-is:            xmonad.hs
   build-depends:
-    , base            ^>=4.13
+    , base            >=4.13    && <4.15
     , containers      ==0.6.2.1
     , extra           ==1.7.3
     , relude          ==0.7.0.0
