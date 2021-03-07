@@ -15,7 +15,7 @@ import XMonad.Hooks.Place (placeHook, simpleSmart)
 import XMonad.Hooks.SetWMName (setWMName)
 import XMonad.Layout.NoBorders (smartBorders)
 import qualified XMonad.StackSet as SS
-import XMonad.Util.Dmenu (dmenu)
+import XMonad.Util.Dmenu (menuArgs)
 import XMonad.Util.EZConfig (additionalKeys)
 import XMonad.Util.Loggers (Logger)
 import XMonad.Util.NamedWindows (getName, unName)
@@ -100,12 +100,15 @@ superMask = mod4Mask
 defaultMask :: KeyMask
 defaultMask = superMask
 
+dmenu' :: MonadIO m => [String] -> m String
+dmenu' = menuArgs "dmenu" ["-fn", "monospace:size=16"]
+
 dmenuWorkspaces :: (WorkspaceId -> X ()) -> X ()
 dmenuWorkspaces f = do
   wss <- withWindowSet (return . SS.workspaces)
   let names = fmap SS.tag wss
   ws <-
-    dmenu
+    dmenu'
       $ filter (not . null)
       $ customWorkspaceNames
         ++ sort (filter (\x -> not $ member x customWorkspaceNamesSet) names)
@@ -135,7 +138,7 @@ keybindings =
     ( (defaultMask .|. shiftMask, xK_F10),
       do
         sinks <- getSinks
-        sinkName <- dmenu $ name <$> sinks
+        sinkName <- dmenu' $ name <$> sinks
         if null sinkName
           then return ()
           else do
@@ -143,7 +146,7 @@ keybindings =
             -- Query for the card profile of the sink.
             cards <- getCards
             let sinkCard = fromJust $ find (\c -> alsaCardName c == card sink) cards
-            profile <- dmenu $ profiles sinkCard
+            profile <- dmenu' $ profiles sinkCard
             if null profile
               then return ()
               else do
@@ -165,7 +168,7 @@ keybindings =
     ((defaultMask, xK_Down), spawn "playerctl stop"),
     ((defaultMask, xK_Right), spawn "playerctl next"),
     -- Custom launcher (see `~/.profile` re: $PATH)
-    ((defaultMask, xK_p), spawn "$(yeganesh -x)"),
+    ((defaultMask, xK_p), spawn "$(yeganesh -x -- -fn monospace:size=16)"),
     -- Dynamic workspaces
     ((defaultMask, xK_backslash), dmenuWorkspaces addWorkspace),
     ((defaultMask .|. shiftMask, xK_backslash), dmenuWorkspaces (liftM2 (>>) addHiddenWorkspace (windows . SS.shift))),
