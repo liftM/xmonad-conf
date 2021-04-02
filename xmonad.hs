@@ -4,6 +4,7 @@ import Control.Monad (liftM2)
 import Data.List (elemIndex, findIndex, isSuffixOf)
 import Data.List.Extra (split, trim)
 import Data.Set (member)
+import Graphics.X11.ExtraTypes.XF86
 import Relude
 import Relude.Unsafe (fromJust)
 import XMonad
@@ -124,10 +125,15 @@ keybindings =
     -- Lock screen
     ((defaultMask .|. shiftMask, xK_l), spawn "slock"),
     ((defaultMask .|. shiftMask, xK_u), spawn "slock dm-tool lock"),
+    -- Screen brightness
+    ((noModMask, xF86XK_MonBrightnessUp), spawn "xbacklight -inc 10"),
+    ((noModMask, xF86XK_MonBrightnessDown), spawn "xbacklight -dec 10"),
     -- Volume control with media keys
-    ((noModMask, 0x1008ff12), spawn "amixer sset Master toggle"),
-    ((noModMask, 0x1008ff11), spawn "amixer sset Master 1%-"),
-    ((noModMask, 0x1008ff13), spawn "amixer sset Master 1%+"),
+    ((noModMask, xF86XK_AudioMute), spawn "amixer sset Master toggle"),
+    ((noModMask, xF86XK_AudioLowerVolume), spawn "amixer sset Master 1%-"),
+    ((noModMask, xF86XK_AudioRaiseVolume), spawn "amixer sset Master 1%+"),
+    -- Microphone control with media keys
+    ((noModMask, xF86XK_AudioMicMute), spawn "amixer sset Capture toggle"),
     -- Volume control with function keys
     ((defaultMask, xK_F10), spawn "amixer sset Master toggle"),
     ((defaultMask, xK_F11), spawn "amixer sset Master 1%-"),
